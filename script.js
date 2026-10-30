@@ -21,7 +21,6 @@ const API_URL = "/api/transactions";
 function formatAmount(amount) {
   return `₹${Number(amount).toFixed(2)}`;
 }
-
 // Make API requests and handle errors
 async function apiRequest(url, options = {}) {
   const response = await fetch(url, {
