@@ -1,4 +1,8 @@
-// Get elements from HTML
+
+// =====================================
+// 1. GET HTML ELEMENTS
+// =====================================
+
 const transactionForm = document.getElementById("transactionForm");
 const descriptionInput = document.getElementById("description");
 const amountInput = document.getElementById("amount");
@@ -12,206 +16,331 @@ const transactionList = document.getElementById("transactionList");
 const filter = document.getElementById("filter");
 const emptyMessage = document.getElementById("emptyMessage");
 
-// Transactions are loaded from MySQL through the backend API.
-// No LocalStorage is used.
-let transactions = [];
 
-const API_URL = "/api/transactions";
+// =====================================
+// 2. LOCAL STORAGE KEY
+// =====================================
 
-function formatAmount(amount) {
-  return `₹${Number(amount).toFixed(2)}`;
+const STORAGE_KEY = "transactions";
+
+
+// =====================================
+// 3. LOAD DATA FROM LOCAL STORAGE
+// =====================================
+
+function loadTransactions() {
+
+    try {
+
+        const savedData = localStorage.getItem(STORAGE_KEY);
+
+        if (!savedData) {
+            return [];
+        }
+
+        const parsedData = JSON.parse(savedData);
+
+        return Array.isArray(parsedData) ? parsedData : [];
+
+    } catch (error) {
+
+        console.error("Error loading transactions:", error);
+
+        return [];
+
+    }
+
 }
-// Make API requests and handle errors
-async function apiRequest(url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-  });
 
-  const data = await response.json().catch(() => ({}));
+let transactions = loadTransactions();
 
-  if (!response.ok) {
-    throw new Error(data.message || "Something went wrong");
-  }
 
-  return data;
+// =====================================
+// 4. SAVE DATA TO LOCAL STORAGE
+// =====================================
+
+function saveTransactions() {
+
+    try {
+
+        localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify(transactions)
+        );
+
+    } catch (error) {
+
+        console.error("Error saving transactions:", error);
+
+        alert("Unable to save data in LocalStorage.");
+
+    }
+
 }
 
-// Add transaction
-transactionForm.addEventListener("submit", async function (event) {
-  event.preventDefault();
 
-  const description = descriptionInput.value.trim();
-  const amount = Number(amountInput.value);
-  const type = typeInput.value;
+// =====================================
+// 5. ADD NEW TRANSACTION
+// =====================================
 
-  if (
-    !description ||
-    description.length > 255 ||
-    !Number.isFinite(amount) ||
-    amount <= 0 ||
-    !["income", "expense"].includes(type)
-  ) {
-    alert("Please enter valid transaction details.");
-    return;
-  }
+transactionForm.addEventListener("submit", function(event) {
 
-  const submitButton = transactionForm.querySelector('button[type="submit"]');
+    event.preventDefault();
 
-  submitButton.disabled = true;
+    const description = descriptionInput.value.trim();
 
-  try {
-    const result = await apiRequest(API_URL, {
-      method: "POST",
-      body: JSON.stringify({
-        description,
-        amount,
-        type,
-      }),
-    });
+    const amount = Number(amountInput.value);
 
-    transactions.unshift(result.transaction);
+    const type = typeInput.value;
+
+    if (
+        description === "" ||
+        !Number.isFinite(amount) ||
+        amount <= 0 ||
+        !["income", "expense"].includes(type)
+    ) {
+
+        alert("Please enter valid transaction details.");
+
+        return;
+
+    }
+
+
+    const transaction = {
+
+        id: Date.now(),
+
+        description: description,
+
+        amount: amount,
+
+        type: type,
+
+        date: new Date().toISOString()
+
+    };
+
+
+    // Add transaction to array
+
+    transactions.push(transaction);
+
+
+    // Save data permanently in browser storage
+
+    saveTransactions();
+
+
+    // Reset form
 
     transactionForm.reset();
 
+
+    // Update UI
+
     displayTransactions();
+
     updateSummary();
-  } catch (error) {
-    alert(`Could not add transaction: ${error.message}`);
-  } finally {
-    submitButton.disabled = false;
-  }
+
 });
 
-// Display transactions with the selected filter
+
+// =====================================
+// 6. DISPLAY TRANSACTIONS
+// =====================================
+
 function displayTransactions() {
-  transactionList.replaceChildren();
 
-  const selectedFilter = filter.value;
+    transactionList.innerHTML = "";
 
-  const filteredTransactions =
-    selectedFilter === "all"
-      ? transactions
-      : transactions.filter(
-          (transaction) => transaction.type === selectedFilter,
+    const selectedFilter = filter.value;
+
+    let filteredTransactions = transactions;
+
+
+    // Apply filter
+
+    if (selectedFilter !== "all") {
+
+        filteredTransactions = transactions.filter(
+            transaction => transaction.type === selectedFilter
         );
 
-  emptyMessage.style.display =
-    filteredTransactions.length === 0 ? "block" : "none";
+    }
 
-  filteredTransactions.forEach((transaction) => {
-    const li = document.createElement("li");
-    li.classList.add("transaction", transaction.type);
 
-    const info = document.createElement("div");
-    info.className = "transaction-info";
+    // Empty message
 
-    const title = document.createElement("h4");
+    if (filteredTransactions.length === 0) {
 
-    // textContent prevents descriptions from being interpreted as HTML
-    title.textContent = transaction.description;
+        emptyMessage.style.display = "block";
 
-    const typeLabel = document.createElement("small");
-    typeLabel.textContent = transaction.type.toUpperCase();
+    } else {
 
-    info.append(title, typeLabel);
+        emptyMessage.style.display = "none";
 
-    const right = document.createElement("div");
-    right.className = "transaction-right";
+    }
 
-    const amountLabel = document.createElement("span");
-    amountLabel.className = "transaction-amount";
 
-    const sign = transaction.type === "income" ? "+" : "-";
-    amountLabel.textContent = `${sign} ${formatAmount(transaction.amount)}`;
+    // Display each transaction
 
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.className = "delete-btn";
-    deleteButton.textContent = "Delete";
+    filteredTransactions.forEach(function(transaction) {
 
-    deleteButton.addEventListener("click", () => {
-      deleteTransaction(transaction.id, deleteButton);
+        const li = document.createElement("li");
+
+        li.classList.add("transaction", transaction.type);
+
+        const sign = transaction.type === "income" ? "+" : "-";
+
+
+        // Create transaction information safely
+
+        const info = document.createElement("div");
+
+        info.className = "transaction-info";
+
+        const heading = document.createElement("h4");
+
+        heading.textContent = transaction.description;
+
+        const small = document.createElement("small");
+
+        small.textContent = transaction.type.toUpperCase();
+
+        info.appendChild(heading);
+
+        info.appendChild(small);
+
+
+        // Create transaction amount
+
+        const right = document.createElement("div");
+
+        right.className = "transaction-right";
+
+        const amountSpan = document.createElement("span");
+
+        amountSpan.className = "transaction-amount";
+
+        amountSpan.textContent =
+            `${sign} ₹${Number(transaction.amount).toFixed(2)}`;
+
+
+        // Create delete button
+
+        const deleteButton = document.createElement("button");
+
+        deleteButton.className = "delete-btn";
+
+        deleteButton.textContent = "Delete";
+
+        deleteButton.addEventListener("click", function() {
+
+            deleteTransaction(transaction.id);
+
+        });
+
+
+        right.appendChild(amountSpan);
+
+        right.appendChild(deleteButton);
+
+        li.appendChild(info);
+
+        li.appendChild(right);
+
+        transactionList.appendChild(li);
+
     });
 
-    right.append(amountLabel, deleteButton);
-    li.append(info, right);
-    transactionList.appendChild(li);
-  });
 }
 
-// Delete transaction from MySQL
-async function deleteTransaction(id, button) {
-  const confirmed = confirm(
-    "Are you sure you want to delete this transaction?",
-  );
 
-  if (!confirmed) return;
+// =====================================
+// 7. DELETE TRANSACTION
+// =====================================
 
-  button.disabled = true;
-
-  try {
-    await apiRequest(`${API_URL}/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
+function deleteTransaction(id) {
 
     transactions = transactions.filter(
-      (transaction) => String(transaction.id) !== String(id),
+        transaction => transaction.id !== id
     );
 
+
+    // Update LocalStorage
+
+    saveTransactions();
+
+
+    // Update UI
+
     displayTransactions();
+
     updateSummary();
-  } catch (error) {
-    alert(`Could not delete transaction: ${error.message}`);
-    button.disabled = false;
-  }
+
 }
 
-// Update balance, income and expense
+
+// =====================================
+// 8. UPDATE INCOME, EXPENSE & BALANCE
+// =====================================
+
 function updateSummary() {
-  let income = 0;
-  let expense = 0;
 
-  transactions.forEach((transaction) => {
-    const amount = Number(transaction.amount);
+    let income = 0;
 
-    if (transaction.type === "income") {
-      income += amount;
-    } else if (transaction.type === "expense") {
-      expense += amount;
-    }
-  });
+    let expense = 0;
 
-  const balance = income - expense;
 
-  incomeElement.textContent = formatAmount(income);
-  expenseElement.textContent = formatAmount(expense);
-  balanceElement.textContent = formatAmount(balance);
+    transactions.forEach(function(transaction) {
+
+        if (transaction.type === "income") {
+
+            income += Number(transaction.amount);
+
+        } else if (transaction.type === "expense") {
+
+            expense += Number(transaction.amount);
+
+        }
+
+    });
+
+
+    const balance = income - expense;
+
+
+    incomeElement.textContent = `₹${income.toFixed(2)}`;
+
+    expenseElement.textContent = `₹${expense.toFixed(2)}`;
+
+    balanceElement.textContent = `₹${balance.toFixed(2)}`;
+
 }
 
-// Filter transactions
-filter.addEventListener("change", displayTransactions);
 
-// Load transactions from MySQL on page startup
-async function loadTransactions() {
-  try {
-    const result = await apiRequest(API_URL);
+// =====================================
+// 9. FILTER TRANSACTIONS
+// =====================================
 
-    transactions = result.transactions;
+filter.addEventListener("change", function() {
 
     displayTransactions();
-    updateSummary();
-  } catch (error) {
-    transactionList.replaceChildren();
-    emptyMessage.style.display = "block";
-    emptyMessage.textContent = `Could not load transactions: ${error.message}`;
 
-    console.error("Loading transactions failed:", error);
-  }
+});
+
+
+// =====================================
+// 10. INITIALIZE APPLICATION
+// =====================================
+
+function initializeApp() {
+
+    displayTransactions();
+
+    updateSummary();
+
 }
 
-// Start application
-loadTransactions();
+initializeApp();
